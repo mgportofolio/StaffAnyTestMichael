@@ -3,14 +3,37 @@ import { Between, FindManyOptions, FindOneOptions } from "typeorm";
 import Shift from "../database/default/entity/shift";
 import { ICreateShift, IUpdateShift } from "../shared/interfaces";
 import { ITimeInterval } from "../shared/interfaces/filter";
+import * as weekUsecase from "./weekUsecase";
+import format from "date-fns/format";
 
 const formatDateTime = (date: string, time: string) => {
   return Date.parse(date + " " + time);
 };
 
+const getWeekInterval= (dateParam?: Date) => {
+    if(dateParam === undefined){
+        dateParam = new Date();
+    }
+    const firstDay = dateParam.getDate() - dateParam.getDay() + 1;
+    const firstRange = new Date(dateParam.setDate(firstDay))
+    const lastRange = new Date(dateParam.setDate(firstDay + 6));
+    const weeklyInterval = format(firstRange, "yyyy-MM-dd") + "|" + format(lastRange, "yyyy-MM-dd")
+    return weeklyInterval;
+};
+
+const isPublishedWeek = (date: string) : boolean => { 
+  const opts = { where: { WeekInterval: getWeekInterval(new Date(date)) } }
+  console.log(opts);
+  const week = weekUsecase.find(opts);
+  if(week !== null) {
+    return true;
+  }
+  return false; 
+}
 
 export const find = async (opts: FindManyOptions<Shift>, intervalWeek: string): Promise<Shift[]> => {
-  if(intervalWeek !== null || intervalWeek !== undefined || intervalWeek !== ""){ 
+  console.log(intervalWeek);
+  if(intervalWeek !== null && intervalWeek !== undefined && intervalWeek !== ""){ 
     const dateString = intervalWeek.split('|');
     const before = dateString[0];
     const after = dateString[1];
@@ -90,8 +113,13 @@ export const create = async (payload: ICreateShift): Promise<Shift> => {
   };
   const isInvalidToCreate = await validateOverlap(timeInterval, payload.intervalWeek);
   if(isInvalidToCreate) {
-    return null;
+    throw new Error("Shift is overlapping");
   }
+
+  if(isPublishedWeek(timeInterval.date)){
+    throw new Error("Shift already published");
+  }
+
   const shift = new Shift();
   shift.name = payload.name;
   shift.date = payload.date;
@@ -105,12 +133,16 @@ export const updateById = async (
   id: string,
   payload: IUpdateShift, 
 ): Promise<Shift> => {
+  const existingShift = await findById(id);
+  if(isPublishedWeek(existingShift.date)){
+    throw new Error("Shift already published");
+  }
   const timeInterval: ITimeInterval = {
     start:payload.startTime, end:payload.endTime, date: payload.date
   };
   const isInvalidToCreate = await validateOverlap(timeInterval, payload.intervalWeek);
   if(isInvalidToCreate) {
-    return null;
+    throw new Error("Shift is overlapping");
   }
   return shiftRepository.updateById(id, {
     ...payload,
@@ -118,5 +150,22 @@ export const updateById = async (
 };
 
 export const deleteById = async (id: string | string[]) => {
+  if(Array.isArray(id)){
+    let ids: string[] = [];
+    id.forEach(async (element) => {
+      let existingShift = await findById(element);
+      if(!isPublishedWeek(existingShift.date)){
+        ids.push(element);
+      }
+    });
+    return shiftRepository.deleteById(ids);
+  }
+  else{
+    const existingShift = await findById(id);
+    if(isPublishedWeek(existingShift.date)){
+      throw new Error("Shift already published");
+    }
+  }
   return shiftRepository.deleteById(id);
 };
+

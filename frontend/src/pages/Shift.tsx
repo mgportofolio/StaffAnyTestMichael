@@ -97,7 +97,6 @@ const Shift = () => {
         const weeklyInterval = getWeeklyIntervalByWeekRange(weekRange.firstRange,weekRange.lastRange);
         const { results } = await getShiftsByWeekRange(weeklyInterval);
         const week = await getPublishedWeek(weeklyInterval);
-        console.log(week);
         if(week.results.length > 0 ) {
           setIsPublished(true);
           setPublishedAt(week.results[0].PublishedAt);
@@ -200,21 +199,17 @@ const Shift = () => {
     try{
       setIsLoading(true);
       setErrMsg("");
-      const date = new Date();
-      const formattedDate = date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
       const formattedWeekRange = FormatDatesToWeekRange(weekRange.firstRange,weekRange.lastRange);
       const payload = {
         weekRange: formattedWeekRange,
         weekInterval: getWeeklyIntervalByWeekRange(weekRange.firstRange,weekRange.lastRange),
-        publishedAt: formattedDate,
+        publishedAt: new Date().toLocaleString('en-GB')
       };
       const data = await publishWeek(payload);
-      console.log(data);
-      setIsPublished(true);
-      setPublishedAt(formattedWeekRange);
+      if(data.statusCode === 200 ) {
+        setIsPublished(true);
+        setPublishedAt(payload.publishedAt);
+      }
     } catch (error) {
       const message = getErrorMessage(error);
       setErrMsg(message);
@@ -279,7 +274,7 @@ const Shift = () => {
             
             <Button style={{margin:'0 10px'}} variant="outlined" 
               onClick={() => history.push("/shift/add")}
-              disabled={isPublished || rows.length === 0}
+              disabled={isPublished}
               className={classes.addShiftBtn}>
                 Add Shift
             </Button>
